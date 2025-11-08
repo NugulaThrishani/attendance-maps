@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Capture Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            margin: 20px auto;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        video {
+            width: 100%;
+            height: auto;
+            transform: scaleX(-1); /* Mirror effect */
+        }
+        .overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 4px dashed #4CAF50;
+            border-radius: 50%;
+            width: 250px;
+            height: 300px;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .captured-images {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        .captured-image {
+            width: 100px;
+            height: 100px;
+            border-radius: 5px;
+            border: 2px solid #4CAF50;
+        }
+        .countdown {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 72px;
+            font-weight: bold;
+        }
+        .error {
+            background: #f44336;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            background: #4CAF50;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📸 Face Capture Registration Test</h1>
+        <p>Quick test to verify face capture functionality</p>
+        
+        <div id="error-message" class="error" style="display: none;"></div>
+        <div id="success-message" class="success" style="display: none;"></div>
+        
+        <div class="video-container" id="video-container" style="display: none;">
+            <video id="video" autoplay playsinline muted></video>
+            <div class="overlay"></div>
+            <div id="countdown" class="countdown" style="display: none;"></div>
+        </div>
+        
+        <div class="controls">
+            <button id="start-btn" onclick="startCamera()">Start Camera</button>
+            <button id="capture-btn" onclick="capturePhoto()" disabled style="display: none;">Take Photo</button>
+            <button id="register-btn" onclick="registerUser()" disabled style="display: none;">Register (3 photos)</button>
+        </div>
+        
+        <div>
+            <p id="photo-count">Photos taken: <span id="count">0</span>/3</p>
+        </div>
+        
+        <div class="captured-images" id="captured-images"></div>
+        
+        <canvas id="canvas" style="display: none;"></canvas>
+    </div>
+
+    <script>
+        let stream = null;
+        let capturedImages = [];
+        const requiredPhotos = 3;
+        
+        function showError(message) {
+            document.getElementById('error-message').textContent = message;
+            document.getElementById('error-message').style.display = 'block';
+            document.getElementById('success-message').style.display = 'none';
+        }
+        
+        function showSuccess(message) {
+            document.getElementById('success-message').textContent = message;
+            document.getElementById('success-message').style.display = 'block';
+            document.getElementById('error-message').style.display = 'none';
+        }
+        
+        async function startCamera() {
+            try {
+                console.log('Requesting camera access...');
+                
+                // Check if browser supports camera
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Camera not supported in this browser');
+                }
+                
+                // Request camera access
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        width: { ideal: 640, min: 480 },
+                        height: { ideal: 480, min: 360 },
+                        facingMode: 'user'
+                    },
+                    audio: false
+                });
+                
+                console.log('Camera access granted!');
+                
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    console.log('Video metadata loaded');
+                    video.play().then(() => {
+                        console.log('Video playing successfully');
+                        document.getElementById('video-container').style.display = 'block';
+                        document.getElementById('start-btn').style.display = 'none';
+                        document.getElementById('capture-btn').style.display = 'inline-block';
+                        document.getElementById('capture-btn').disabled = false;
+                        showSuccess('Camera started! Position your face in the oval guide.');
+                    }).catch(err => {
+                        console.error('Play error:', err);
+                        showError('Error starting video playback');
+                    });
+                };
+                
+                video.onerror = (e) => {
+                    console.error('Video error:', e);
+                    showError('Video error occurred');
+                };
+                
+            } catch (error) {
+                console.error('Camera error:', error);
+                let errorMessage = 'Camera access failed: ';
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMessage += 'Please allow camera access and refresh the page.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage += 'No camera found.';
+                } else if (error.name === 'NotReadableError') {
+                    errorMessage += 'Camera is being used by another application.';
+                } else {
+                    errorMessage += error.message;
+                }
+                
+                showError(errorMessage);
+            }
+        }
+        
+        function capturePhoto() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            if (!video || !canvas || !ctx) {
+                showError('Video or canvas not available');
+                return;
+            }
+            
+            // Check if video is actually playing
+            if (video.videoWidth === 0 || video.videoHeight === 0) {
+                showError('Video not ready, please wait...');
+                return;
+            }
+            
+            // Disable capture button temporarily
+            document.getElementById('capture-btn').disabled = true;
+            
+            // Start countdown
+            let countdown = 3;
+            const countdownEl = document.getElementById('countdown');
+            countdownEl.style.display = 'flex';
+            countdownEl.textContent = countdown;
+            
+            const countdownInterval = setInterval(() => {
+                countdown--;
+                if (countdown > 0) {
+                    countdownEl.textContent = countdown;
+                } else {
+                    countdownEl.textContent = '📸';
+                    clearInterval(countdownInterval);
+                    
+                    setTimeout(() => {
+                        countdownEl.style.display = 'none';
+                        takePhoto();
+                    }, 500);
+                }
+            }, 1000);
+        }
+        
+        function takePhoto() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            console.log('Taking photo, video dimensions:', video.videoWidth, 'x', video.videoHeight);
+            
+            // Set canvas size
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Mirror the image (flip horizontally)
+            ctx.save();
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+            ctx.restore();
+            
+            // Convert to base64
+            const imageData = canvas.toDataURL('image/jpeg', 0.9);
+            capturedImages.push(imageData);
+            
+            console.log('Photo captured! Total:', capturedImages.length);
+            
+            // Update UI
+            updateUI();
+            
+            // Enable capture button
+            document.getElementById('capture-btn').disabled = false;
+        }
+        
+        function updateUI() {
+            const count = capturedImages.length;
+            document.getElementById('count').textContent = count;
+            
+            // Show captured images
+            const container = document.getElementById('captured-images');
+            container.innerHTML = '';
+            
+            capturedImages.forEach((imageData, index) => {
+                const img = document.createElement('img');
+                img.src = imageData;
+                img.className = 'captured-image';
+                img.alt = `Captured photo ${index + 1}`;
+                container.appendChild(img);
+            });
+            
+            // Show register button if we have enough photos
+            if (count >= requiredPhotos) {
+                document.getElementById('register-btn').style.display = 'inline-block';
+                document.getElementById('register-btn').disabled = false;
+                document.getElementById('capture-btn').textContent = 'Take More Photos (Optional)';
+                showSuccess(`Great! ${count} photos captured. You can now register!`);
+            } else {
+                document.getElementById('capture-btn').textContent = `Take Photo (${count}/${requiredPhotos})`;
+                showSuccess(`Photo ${count} captured! Take ${requiredPhotos - count} more.`);
+            }
+        }
+        
+        async function registerUser() {
+            if (capturedImages.length < requiredPhotos) {
+                showError(`Need at least ${requiredPhotos} photos to register`);
+                return;
+            }
+            
+            console.log('Starting registration with', capturedImages.length, 'photos');
+            
+            // Simulate registration API call
+            try {
+                showSuccess('Processing registration... (This would normally call the backend API)');
+                
+                // In real implementation, you would send data to:
+                // POST http://localhost:8000/auth/register
+                const registrationData = {
+                    email: "test@example.com",
+                    password: "TestPassword123",
+                    full_name: "Test User",
+                    faculty_id: "FAC-12345",
+                    department: "Computer Science",
+                    designation: "Professor",
+                    face_images: capturedImages
+                };
+                
+                console.log('Would send to backend:', {
+                    ...registrationData,
+                    face_images: `[${registrationData.face_images.length} base64 images]`
+                });
+                
+                // Simulate API delay
+                setTimeout(() => {
+                    showSuccess('✅ Registration completed successfully! (This is a test simulation)');
+                    document.getElementById('register-btn').textContent = 'Registration Complete!';
+                    document.getElementById('register-btn').disabled = true;
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Registration error:', error);
+                showError('Registration failed: ' + error.message);
+            }
+        }
+        
+        // Cleanup function
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+        }
+        
+        // Cleanup when page closes
+        window.addEventListener('beforeunload', stopCamera);
+    </script>
+</body>
+</html>

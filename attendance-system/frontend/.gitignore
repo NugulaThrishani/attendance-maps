@@ -1,0 +1,5 @@
+.vercel
+# add other files to ignore here
+*/node_modules
+*/venv
+*.log
